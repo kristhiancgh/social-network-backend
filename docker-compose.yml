@@ -1,0 +1,198 @@
+# =============================================================================
+#  Social network - development stack
+# =============================================================================
+#   docker compose up --build
+#
+#   Gateway ....... http://localhost:8080
+#   Swagger (all) . http://localhost:8080/docs
+#   Postgres ...... localhost:5432
+#
+#  Demo accounts are created on startup by each service's *DataSeeder.
+#  Every one of them logs in with the password: Password123!
+# =============================================================================
+
+name: social-network
+
+# -----------------------------------------------------------------------------
+#  Settings repeated by all four Spring Boot services.
+#  YAML anchors, not copy-paste: the JWT secret in particular MUST be identical
+#  everywhere - auth-service signs with it and the others verify with it, so a
+#  mismatch makes every token look forged.
+# -----------------------------------------------------------------------------
+x-service-common: &service-common
+  restart: unless-stopped
+  networks: [social-net]
+  environment: &service-env
+    JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me-in-production-0123456789}
+    GATEWAY_URL: ${GATEWAY_URL:-http://localhost:8080}
+    APP_SEEDER_ENABLED: ${APP_SEEDER_ENABLED:-true}
+    APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:4200,http://localhost:8080}
+    TZ: UTC
+
+services:
+
+  # ---------------------------------------------------------------------------
+  #  PostgreSQL - one instance, four databases (one per service)
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:17-alpine
+    container_name: social-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: postgres
+      TZ: UTC
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      # Creates the four databases and their owning roles. Runs ONCE, on an
+      # empty data directory only. After changing it you must also remove the
+      # volume: docker compose down -v
+      #
+      # El sufijo `z` reetiqueta el directorio para SELinux. Sin él, en Fedora,
+      # RHEL, CentOS o Rocky el contenedor no puede leer estos scripts: Postgres
+      # arranca sin crear ninguna base y los servicios fallan después con
+      # "database authdb does not exist", que no señala a la causa. En Docker
+      # Desktop y en distribuciones sin SELinux la opción se ignora.
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro,z
+    healthcheck:
+      # The -d flag matters: without it pg_isready reports the server as up
+      # while it is still running the init scripts, and every service races it.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d likedb"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    networks: [social-net]
+
+  # ---------------------------------------------------------------------------
+  #  auth-service - login, registration, JWT issuing
+  # ---------------------------------------------------------------------------
+  auth-service:
+    <<: *service-common
+    build:
+      # Repository root: a Gradle multi-project build needs settings.gradle.kts
+      # and shared-kernel, neither of which lives in the service folder.
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: social-auth-service
+    environment:
+      <<: *service-env
+      # escapeSyntaxCallMode=call is REQUIRED here and only here among the four:
+      # this service's procedures are the ones invoked through JDBC's {call}
+      # escape. Without it pgjdbc rewrites CALL into SELECT and fails.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/authdb?escapeSyntaxCallMode=call
+      SPRING_DATASOURCE_USERNAME: auth_service
+      SPRING_DATASOURCE_PASSWORD: ${AUTH_DB_PASSWORD:-auth_dev_pwd}
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  #  profile-service - names, birth date, alias
+  # ---------------------------------------------------------------------------
+  profile-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: profile-service/Dockerfile
+    container_name: social-profile-service
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/profiledb
+      SPRING_DATASOURCE_USERNAME: profile_service
+      SPRING_DATASOURCE_PASSWORD: ${PROFILE_DB_PASSWORD:-profile_dev_pwd}
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  #  post-service - the timeline
+  # ---------------------------------------------------------------------------
+  post-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: post-service/Dockerfile
+    container_name: social-post-service
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/postdb
+      SPRING_DATASOURCE_USERNAME: post_service
+      SPRING_DATASOURCE_PASSWORD: ${POST_DB_PASSWORD:-post_dev_pwd}
+      # Called once per published post, to decorate it with the author's alias.
+      PROFILE_SERVICE_URL: http://profile-service:8082
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      # Waits for profile-service to be reachable, but note the alias lookup is
+      # best-effort at runtime: if profile-service later goes down, posts are
+      # still published, just without an alias.
+      profile-service:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  #  like-service - likes plus the WebSocket
+  # ---------------------------------------------------------------------------
+  like-service:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: like-service/Dockerfile
+    container_name: social-like-service
+    environment:
+      <<: *service-env
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/likedb
+      SPRING_DATASOURCE_USERNAME: like_service
+      SPRING_DATASOURCE_PASSWORD: ${LIKE_DB_PASSWORD:-like_dev_pwd}
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  #  api-gateway - the single address the browser uses
+  # ---------------------------------------------------------------------------
+  api-gateway:
+    <<: *service-common
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: social-api-gateway
+    environment:
+      <<: *service-env
+      AUTH_SERVICE_URL: http://auth-service:8081
+      PROFILE_SERVICE_URL: http://profile-service:8082
+      POST_SERVICE_URL: http://post-service:8083
+      LIKE_SERVICE_URL: http://like-service:8084
+    ports:
+      - "8080:8080"
+    depends_on:
+      # service_healthy, not service_started: the aggregated Swagger UI fetches
+      # each service's /v3/api-docs, and a service that is merely "started" has
+      # not published one yet.
+      auth-service:
+        condition: service_healthy
+      profile-service:
+        condition: service_healthy
+      post-service:
+        condition: service_healthy
+      like-service:
+        condition: service_healthy
+
+networks:
+  social-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+    driver: local

@@ -1,0 +1,23 @@
+# Keeps the build context small and stops host artefacts leaking into the image.
+# build/ in particular would ship a jar compiled by whatever JDK the developer
+# happens to have, instead of the one in the builder stage.
+
+.git/
+.gitignore
+.github/
+
+build/
+*/build/
+.gradle/
+*/.gradle/
+
+.idea/
+*.iml
+.vscode/
+
+.env
+*.log
+.DS_Store
+
+README.md
+docs/

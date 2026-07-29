@@ -1,0 +1,64 @@
+# =============================================================================
+#  api-gateway - the single address the browser talks to
+# =============================================================================
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      server:
+        webflux:
+          default-filters:
+            - DedupeResponseHeader=Access-Control-Allow-Origin Access-Control-Allow-Credentials, RETAIN_FIRST
+          httpclient:
+            connect-timeout: 3000
+            response-timeout: 15s
+
+# --- Aggregated Swagger UI at /docs ------------------------------------------
+springdoc:
+  swagger-ui:
+    path: /docs
+    urls:
+      - name: 1. auth-service
+        url: /v3/api-docs/auth-service
+      - name: 2. profile-service
+        url: /v3/api-docs/profile-service
+      - name: 3. post-service
+        url: /v3/api-docs/post-service
+      - name: 4. like-service
+        url: /v3/api-docs/like-service
+  api-docs:
+    enabled: true
+    path: /v3/api-docs/gateway
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  services:
+    auth: ${AUTH_SERVICE_URL:http://localhost:8081}
+    profile: ${PROFILE_SERVICE_URL:http://localhost:8082}
+    post: ${POST_SERVICE_URL:http://localhost:8083}
+    like: ${LIKE_SERVICE_URL:http://localhost:8084}
+
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200}
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level %logger{36} - %msg%n"
+  level:
+    dev.social: INFO
+    org.springframework.cloud.gateway: INFO

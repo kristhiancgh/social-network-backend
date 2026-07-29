@@ -1,0 +1,33 @@
+# =============================================================================
+#  Gradle version catalog - the single place where dependency versions live.
+#  Every module refers to these aliases, so bumping a version happens once.
+# =============================================================================
+
+[versions]
+springBoot    = "3.5.16"
+springDepMgmt = "1.1.7"
+springCloud   = "2025.0.0"
+springdoc     = "2.8.17"
+jjwt          = "0.12.6"
+
+[libraries]
+# --- OpenAPI / Swagger UI -----------------------------------------------------
+springdoc-webmvc  = { module = "org.springdoc:springdoc-openapi-starter-webmvc-ui",  version.ref = "springdoc" }
+springdoc-webflux = { module = "org.springdoc:springdoc-openapi-starter-webflux-ui", version.ref = "springdoc" }
+
+# --- JWT ----------------------------------------------------------------------
+# jjwt splits api / impl / jackson on purpose: only `api` is a compile
+# dependency, the other two are runtime-only so application code cannot
+# accidentally bind to implementation classes.
+jjwt-api     = { module = "io.jsonwebtoken:jjwt-api",     version.ref = "jjwt" }
+jjwt-impl    = { module = "io.jsonwebtoken:jjwt-impl",    version.ref = "jjwt" }
+jjwt-jackson = { module = "io.jsonwebtoken:jjwt-jackson", version.ref = "jjwt" }
+
+# --- Spring Cloud Gateway -----------------------------------------------------
+# No version here on purpose: it is pinned by the spring-cloud-dependencies BOM
+# imported in api-gateway/build.gradle.kts.
+gateway-server-webflux = { module = "org.springframework.cloud:spring-cloud-starter-gateway-server-webflux" }
+
+[plugins]
+springBoot    = { id = "org.springframework.boot",        version.ref = "springBoot" }
+springDepMgmt = { id = "io.spring.dependency-management", version.ref = "springDepMgmt" }

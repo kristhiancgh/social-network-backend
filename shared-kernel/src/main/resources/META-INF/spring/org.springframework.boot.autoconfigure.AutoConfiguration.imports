@@ -1,0 +1,3 @@
+dev.social.shared.error.ErrorHandlingAutoConfiguration
+dev.social.shared.security.JwtSecurityAutoConfiguration
+dev.social.shared.openapi.OpenApiAutoConfiguration

@@ -1,0 +1,92 @@
+# =============================================================================
+#  post-service
+# =============================================================================
+server:
+  port: ${SERVER_PORT:8083}
+  error:
+    whitelabel:
+      enabled: false
+  shutdown: graceful
+
+spring:
+  application:
+    name: post-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/postdb}
+    username: ${SPRING_DATASOURCE_USERNAME:post_service}
+    password: ${SPRING_DATASOURCE_PASSWORD:post_dev_pwd}
+    hikari:
+      pool-name: post-pool
+      maximum-pool-size: 10
+      minimum-idle: 2
+      connection-timeout: 10000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+springdoc:
+  swagger-ui:
+    path: /docs
+    operations-sorter: method
+    tags-sorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-only-secret-change-me-in-production-0123456789}
+    issuer: social-network
+    access-token-ttl: 2h
+    clock-skew: 30s
+
+  openapi:
+    title: Posts API
+    version: 1.0.0
+    description: >
+      The timeline and publishing. Like counts are NOT part of these payloads -
+      they come from like-service and stay fresh over the WebSocket.
+    gateway-url: ${GATEWAY_URL:http://localhost:8080}
+
+  seeder:
+    enabled: ${APP_SEEDER_ENABLED:true}
+
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:4200,http://localhost:8080}
+
+  clients:
+    profile-service:
+      base-url: ${PROFILE_SERVICE_URL:http://localhost:8082}
+      timeout-ms: 1500
+
+logging:
+  pattern:
+    console: "%d{HH:mm:ss.SSS} %-5level [%X{traceId:-no-trace}] %logger{36} - %msg%n"
+  level:
+    dev.social: INFO

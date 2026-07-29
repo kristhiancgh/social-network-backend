@@ -1,0 +1,51 @@
+# =============================================================================
+#  Normalización de fin de línea
+# =============================================================================
+#  Sin este archivo, Git para Windows (core.autocrlf=true por defecto) convierte
+#  los archivos a CRLF al clonar. Para el código fuente da igual, pero para todo
+#  lo que se EJECUTA dentro de un contenedor Linux es fatal: la primera línea de
+#  gradlew pasa a ser "#!/bin/sh\r" y el kernel busca un intérprete llamado
+#  "/bin/sh\r" que no existe. El error resultante es
+#
+#      /bin/sh: ./gradlew: not found
+#
+#  que engaña, porque "not found" se refiere al intérprete y no al script.
+#
+#  Aquí se fija el fin de línea por tipo de archivo, de modo que el repositorio
+#  se comporta igual clonado en Windows, en macOS o en Linux.
+# =============================================================================
+
+# Por defecto: Git normaliza a LF en el repositorio y respeta lo declarado abajo
+# al hacer checkout.
+* text=auto eol=lf
+
+# --- Se ejecutan dentro de contenedores Linux: SIEMPRE LF ---------------------
+*.sh            text eol=lf
+gradlew         text eol=lf
+Dockerfile      text eol=lf
+Dockerfile.*    text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+*.sql           text eol=lf
+*.conf          text eol=lf
+.env.example    text eol=lf
+
+# --- Solo para Windows: necesitan CRLF ----------------------------------------
+# Un .bat con LF falla de formas silenciosas y difíciles de diagnosticar.
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.ps1           text eol=crlf
+
+# --- Binarios: Git no debe tocarlos jamás -------------------------------------
+*.jar           binary
+*.war           binary
+*.pdf           binary
+*.png           binary
+*.jpg           binary
+*.jpeg          binary
+*.gif           binary
+*.ico           binary
+*.woff          binary
+*.woff2         binary
+*.zip           binary
+*.gz            binary
